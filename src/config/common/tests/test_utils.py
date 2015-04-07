@@ -121,12 +121,10 @@ class FakeCF(object):
         result = {}
         for key in keys:
             try:
-                result[key] = {}
-                for col_name in self._rows[key]:
-                    if column_start and column_start not in col_name:
-                        continue
-                    result[key][col_name] = copy.deepcopy(self._rows[key][col_name])
-            except KeyError:
+                col_dict = self.get(key, columns, column_start, column_finish,
+                                    column_count, include_timestamp)
+                result[key] = col_dict
+            except pycassa.NotFoundException:
                 pass
 
         return result
