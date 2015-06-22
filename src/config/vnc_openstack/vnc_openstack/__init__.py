@@ -4,7 +4,7 @@
 
 import argparse
 import sys
-import json
+from cfgm_common import jsonutils as json
 import uuid
 import socket
 import gevent
