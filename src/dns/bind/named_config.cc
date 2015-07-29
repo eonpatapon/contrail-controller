@@ -169,6 +169,7 @@ void NamedConfig::WriteOptionsConfig() {
     file_ << "options {" << endl;
     file_ << "    directory \"" << named_config_dir_ << "\";" << endl;
     file_ << "    managed-keys-directory \"" << named_config_dir_ << "\";" << endl;
+    file_ << "    session-keyfile \"" << named_config_dir_ << "session.key\";" << endl;
     file_ << "    empty-zones-enable no;" << endl;
     file_ << "    pid-file \"" << GetPidFilePath() << "\";" << endl;
     file_ << "    listen-on port " << Dns::GetDnsPort() << " { any; };" << endl;
