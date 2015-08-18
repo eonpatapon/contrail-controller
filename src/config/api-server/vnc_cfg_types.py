@@ -948,7 +948,23 @@ class VirtualDnsRecordServer(VirtualDnsRecordServerGen):
 def _check_policy_rules(entries, network_policy_rule=False):
     if not entries:
         return True, ""
-    for rule in entries.get('policy_rule') or []:
+    rules = entries.get('policy_rule') or []
+
+    def _get_duplicated_rules(c_rule):
+        duplicates = []
+        c_rule_uuid = c_rule.pop('rule_uuid', None)
+        for rule in rules:
+            rule_uuid = rule.pop('rule_uuid', None)
+            if c_rule == rule and c_rule_uuid != rule_uuid:
+                duplicates.append(rule_uuid)
+            rule['rule_uuid'] = rule_uuid
+        c_rule['rule_uuid'] = c_rule_uuid
+        return duplicates
+
+    for rule in rules:
+        duplicates = _get_duplicated_rules(rule)
+        if duplicates:
+            return (False, (409, 'Rule already exists : %s' % ', '.join(duplicates)))
         if not rule.get('rule_uuid'):
             rule['rule_uuid'] = str(uuid.uuid4())
         protocol = rule['protocol']
