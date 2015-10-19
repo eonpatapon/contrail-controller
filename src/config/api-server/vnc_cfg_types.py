@@ -1075,6 +1075,17 @@ def _check_policy_rules(entries, network_policy_rule=False):
             if protocol not in valids:
                 return (False, (400, 'Rule with invalid protocol : %s' %
                                 protocol))
+
+        ethertype = rule['ethertype']
+        for addr in rule.get('src_addresses', []):
+            if addr.get('subnet') is not None:
+                ip_prefix = addr["subnet"].get('ip_prefix')
+                ip_prefix_len = addr["subnet"].get('ip_prefix_len')
+                network = IPNetwork("%s/%s" % (ip_prefix, ip_prefix_len))
+                if not ethertype == "IPv%s" % network.version:
+                    return (False, (400, 'Rule subnet with incorrect ethertype : %s' %
+                                    ethertype))
+
         if network_policy_rule:
             if rule.get('action_list') is None:
                 return (False, (400, 'Action is required'))
