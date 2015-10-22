@@ -2199,99 +2199,67 @@ class VncApiServer(object):
                          back_ref_uuids=None, obj_uuids=None,
                          is_count=False, is_detail=False, filters=None,
                          req_fields=None):
-        obj_type = resource_type.replace('-', '_') # e.g. virtual_network
 
-        (ok, result) = self._db_conn.dbe_list(obj_type,
-                             parent_uuids, back_ref_uuids, obj_uuids, is_count,
-                             filters)
+        obj_type = resource_type.replace('-', '_')  # e.g. virtual_network
+        (ok, result) = self._db_conn.dbe_list(obj_type, parent_uuids,
+                                              back_ref_uuids, obj_uuids,
+                                              is_count, filters)
         if not ok:
-            self.config_object_error(None, None, '%ss' %(obj_type),
+            self.config_object_error(None, None, '%ss' % (obj_type),
                                      'dbe_list', result)
             raise cfgm_common.exceptions.HttpError(404, result)
 
         # If only counting, return early
         if is_count:
-            return {'%ss' %(resource_type): {'count': result}}
+            return {'%ss' % (resource_type): {'count': result}}
 
         fq_names_uuids = result
-        obj_dicts = []
-        if not is_detail:
-            if not self.is_admin_request():
-                obj_ids_list = [{'uuid': obj_uuid} 
-                                for _, obj_uuid in fq_names_uuids]
-                obj_fields = [u'id_perms']
-                if req_fields:
-                    obj_fields = obj_fields + req_fields
-                (ok, result) = self._db_conn.dbe_read_multi(
-                                    obj_type, obj_ids_list, obj_fields)
-                if not ok:
-                    raise cfgm_common.exceptions.HttpError(404, result)
-                for obj_result in result:
-                    if obj_result['id_perms'].get('user_visible', True):
-                        obj_dict = {}
-                        obj_dict['uuid'] = obj_result['uuid']
-                        obj_dict['href'] = self.generate_url(resource_type,
-                                                         obj_result['uuid'])
-                        obj_dict['fq_name'] = obj_result['fq_name']
-                        for field in req_fields:
-                            try:
-                                obj_dict[field] = obj_result[field]
-                            except KeyError:
-                                pass
-                        obj_dicts.append(obj_dict)
-            else: # admin
-                obj_results = {}
-                if req_fields:
-                    obj_ids_list = [{'uuid': obj_uuid}
-                                    for _, obj_uuid in fq_names_uuids]
-                    (ok, result) = self._db_conn.dbe_read_multi(
-                        obj_type, obj_ids_list, req_fields)
-                    if ok:
-                        obj_results = dict((elem['uuid'], elem)
-                                           for elem in result)
-                for fq_name, obj_uuid in fq_names_uuids:
-                    obj_dict = {}
-                    obj_dict['uuid'] = obj_uuid
-                    obj_dict['href'] = self.generate_url(resource_type,
-                                                         obj_uuid)
-                    obj_dict['fq_name'] = fq_name
-                    for field in req_fields or []:
-                       try:
-                           obj_dict[field] = obj_results[obj_uuid][field]
-                       except KeyError:
-                           pass
-                    obj_dicts.append(obj_dict)
-        else: #detail
-            obj_ids_list = [{'uuid': obj_uuid}
-                            for _, obj_uuid in fq_names_uuids]
-
+        obj_ids_list = [{'uuid': obj_uuid}
+                        for _, obj_uuid in fq_names_uuids]
+        if is_detail:
             obj_class = self.get_resource_class(obj_type)
-            obj_fields = list(obj_class.prop_fields) + \
-                         list(obj_class.ref_fields)
+            obj_fields = list(obj_class.prop_fields) + list(obj_class.ref_fields)
+        else:
+            obj_fields = [u'id_perms', u'uuid', u'fq_name']
             if req_fields:
                 obj_fields.extend(req_fields)
-            (ok, result) = self._db_conn.dbe_read_multi(
-                                obj_type, obj_ids_list, obj_fields)
 
-            if not ok:
-                raise cfgm_common.exceptions.HttpError(404, result)
+        (ok, result) = self._db_conn.dbe_read_multi(obj_type,
+                                                    obj_ids_list,
+                                                    obj_fields)
+        if not ok:
+            raise cfgm_common.exceptions.HttpError(404, result)
 
-            for obj_result in result:
-                obj_dict = {}
+        obj_dicts = []
+        for obj_result in result:
+            if 'id_perms' not in obj_result:
+                # It is possible that the object was deleted, but received
+                # an update after that. We need to ignore it for now. In
+                # future, we should clean up such stale objects
+                continue
+            if not self._permissions.validate_user_visible_perm(
+                    obj_result['id_perms'], self.is_admin_request()):
+                continue
+
+            obj_dict = {}
+            obj_dict['href'] = self.generate_url(resource_type,
+                                                 obj_result['uuid'])
+            if is_detail:
                 obj_dict['name'] = obj_result['fq_name'][-1]
-                obj_dict['href'] = self.generate_url(
-                                        resource_type, obj_result['uuid'])
+                # Get all fields
                 obj_dict.update(obj_result)
-                if 'id_perms' not in obj_dict:
-                    # It is possible that the object was deleted, but received
-                    # an update after that. We need to ignore it for now. In
-                    # future, we should clean up such stale objects
-                    continue
-                if (obj_dict['id_perms'].get('user_visible', True) or
-                    self.is_admin_request()):
-                    obj_dicts.append({resource_type: obj_dict})
+                obj_dicts.append({resource_type: obj_dict})
+            else:
+                # Add only requested fields and common fields
+                # except id_perms
+                for field in obj_fields.remove(u'id_perms'):
+                    try:
+                        obj_dict[field] = obj_result[field]
+                    except KeyError:
+                        pass
+                obj_dicts.append(obj_dict)
 
-        return {'%ss' %(resource_type): obj_dicts}
+        return {'%ss' % (resource_type): obj_dicts}
     # end _list_collection
 
     def get_db_connection(self):
