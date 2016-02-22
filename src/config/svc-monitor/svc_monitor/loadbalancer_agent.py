@@ -36,10 +36,14 @@ class LoadbalancerAgent(Agent):
 
     def pre_create_service_vm(self, instance_index, si, st, vm):
         for nic in si.vn_info:
-           if nic['type'] == svc_info.get_right_if_str():
+            if nic['type'] == svc_info.get_right_if_str():
                 iip_id, vn_id = self._get_vip_vmi_iip(si)
                 nic['iip-id'] = iip_id
                 nic['user-visible'] = False
+            elif nic['type'] == svc_info.get_left_if_str():
+                nic['user-visible'] = False
+
+        return True
 
     def _get_vip_vmi_iip(self, si):
         if not si.loadbalancer_pool:
