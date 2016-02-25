@@ -593,6 +593,21 @@ class VirtualNetworkST(DictST):
         return rinst
     # end locate_routing_instance_no_target
 
+    def _backup_user_defined_rt(self, rinst_obj):
+        route_target_list = rinst_obj.get_route_target_refs()
+        rt_list = []
+        for rt in route_target_list or []:
+            try:
+                if rt['to'][0] in self.rt_list:
+                    continue
+                elif rt['to'][0].split(':')[1] != str(self.get_autonomous_system()):
+                    rt_list.append(':'.join(rt['to']))
+                elif int(rt['to'][0].split(':')[-1]) < common.BGP_RTGT_MIN_ID:
+                    rt_list.append(':'.join(rt['to']))
+            except IndexError:
+                _sandesh._logger.error("Failed to parse RT %s of RI %s" % (str(rt), rinst_obj.uuid))
+        return rt_list
+
     def locate_routing_instance(self, rinst_name, service_chain=None,
                                 ri_dict=None):
         if rinst_name in self.rinst:
@@ -640,6 +655,7 @@ class VirtualNetworkST(DictST):
                     _vnc_lib.routing_instance_delete(id=rinst_obj.uuid)
                     rinst_obj = None
                 else:
+                    user_defined_rt = self._backup_user_defined_rt(rinst_obj)
                     update_ri = False
                     stale_rt_list = [':'.join(rt_ref['to']) for rt_ref in
                                      rinst_obj.get_route_target_refs()]
@@ -666,6 +682,9 @@ class VirtualNetworkST(DictST):
                                 update_ri = True
                             else:
                                 stale_rt_list.remove(rt)
+                    for rt in user_defined_rt:
+                        if rt in stale_rt_list:
+                            stale_rt_list.remove(rt)
                     if update_ri:
                         _vnc_lib.routing_instance_update(rinst_obj)
             except (NoIdError, KeyError):
