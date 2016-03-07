@@ -615,7 +615,7 @@ class VRouterHostedManager(InstanceManager):
                 service_up = False
             else:
                 vr = VirtualRouterSM.get(vm.virtual_router)
-                if self.vrouter_scheduler.vrouter_running(vr.name):
+                if self.vrouter_scheduler.vrouter_running(vr.name, for_creation=False):
                     continue
                 self._vnc_lib.ref_update('virtual-router', vr.uuid,
                     'virtual-machine', vm.uuid, None, 'DELETE')

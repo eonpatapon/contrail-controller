@@ -102,8 +102,9 @@ class VRouterScheduler(object):
                     continue
         return vrs_fq_name
 
-    def vrouter_running(self, vrouter_name):
-        """Check if a vrouter agent is up and running."""
+    def vrouter_running(self, vrouter_name, for_creation=True):
+        """Check if a vrouter agent is up and running and the version is
+        sufficient."""
         path = "/analytics/uves/vrouter/"
 
         fqdn_uuid = "%s?cfilt=VrouterAgent" % vrouter_name
@@ -130,6 +131,9 @@ class VRouterScheduler(object):
             return False
 
         for process in node_status['NodeStatus']['process_status']:
+            if for_creation is False and process['module_id'] == "VRouterAgent":
+                return True
+
             if (process['module_id'] == constants.MODULE_VROUTER_AGENT_NAME and
                 int(process['instance_id']) == 0 and
                 process['state'] == 'Functional'):
