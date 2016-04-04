@@ -21,10 +21,8 @@ LOG_DIR = '/var/log/contrail/'
 
 class IndexAllocator(object):
 
-    def __init__(self, zookeeper_client, path, size=0, start_idx=0,
-                 reverse=False, alloc_list=None, max_alloc=0):
-        self._size = size
-        self._start_idx = start_idx
+    def __init__(self, zookeeper_client, path, size=0, start_idx=0, 
+                 reverse=False,alloc_list=None, max_alloc=0):
         if alloc_list is None:
             self._alloc_list = [{'start':start_idx, 'end':start_idx+size}]
         else:
@@ -33,6 +31,7 @@ class IndexAllocator(object):
 
         alloc_count = len(self._alloc_list)
         total_size = 0
+        start_idx = self._alloc_list[0]['start']
         size = 0
 
         #check for overlap in alloc_list --TODO
@@ -45,6 +44,8 @@ class IndexAllocator(object):
             size += idx_end_addr - idx_start_addr + 1
         size += self._alloc_list[alloc_count-1]['end'] - self._alloc_list[alloc_count-1]['start'] + 1
 
+        self._size = size
+        self._start_idx = start_idx
         if max_alloc == 0:
             self._max_alloc = self._size
         else:
@@ -108,19 +109,7 @@ class IndexAllocator(object):
             self._in_use[idx] = 1
     # end _set_in_use
 
-    def get_alloc_count(self):
-        return self._in_use.count()
-    # end get_alloc_count
-
-    def set_in_use(self, idx):
-        bit_idx = self._get_bit_from_zk_index(idx)
-        if bit_idx < 0:
-            return
-        self._set_in_use(bit_idx)
-    # end set_in_use
-
     def alloc(self, value=None):
-        # Allocates a index from the allocation list
         if self._in_use.all():
             idx = self._in_use.length()
             if idx > self._max_alloc:
@@ -141,18 +130,17 @@ class IndexAllocator(object):
     # end alloc
 
     def reserve(self, idx, value=None):
-        # Reserves the requested index if available
-        if not self._start_idx <= idx < self._start_idx + self._size:
-            return None
-
+        bit_idx = self._get_bit_from_zk_index(idx)
+        if bit_idx < 0:
+            return None  
         try:
             # Create a node at path and return its integer value
             id_str = "%(#)010d" % {'#': idx}
             self._zookeeper_client.create_node(self._path + id_str, value)
-            self.set_in_use(idx)
+            self._set_in_use(bit_idx)
             return idx
         except ResourceExistsError:
-            self.set_in_use(idx)
+            self._set_in_use(bit_idx) 
             return None
     # end reserve
 
