@@ -8,12 +8,14 @@
 #include <ovsdb_entry.h>
 #include <ovsdb_object.h>
 #include <ovsdb_client_idl.h>
+#include <ovsdb_resource_vxlan_id.h>
 
 class PhysicalDeviceVn;
 
 namespace OVSDB {
 class MulticastMacLocalEntry;
 class LogicalSwitchEntry;
+class OvsdbResourceVxLanId;
 
 class LogicalSwitchTable : public OvsdbDBObject {
 public:
@@ -63,6 +65,7 @@ public:
         DEL_REQ,
         ADD_ACK,
         DEL_ACK,
+        DUP_TUNNEL_KEY_ADD,
     };
     LogicalSwitchEntry(OvsdbDBObject *table, const std::string &name);
     LogicalSwitchEntry(OvsdbDBObject *table, const LogicalSwitchEntry *key);
@@ -85,6 +88,7 @@ public:
     int64_t vxlan_id() const;
     std::string tor_service_node() const;
     const IpAddress &tor_ip() const;
+    const OvsdbResourceVxLanId &res_vxlan_id() const;
 
     bool Sync(DBEntry*);
     bool IsLess(const KSyncEntry&) const;
@@ -93,9 +97,18 @@ public:
 
     bool IsLocalMacsRef() const;
 
+    // Override Ack api to get trigger on Ack
+    void Ack(bool success);
+
+    // Override TxnDoneNoMessage to get triggers for no message
+    // transaction complete
+    void TxnDoneNoMessage();
+
 private:
     void SendTrace(Trace event) const;
     void DeleteOldMcastRemoteMac();
+
+    void ReleaseLocatorCreateReference();
 
     friend class LogicalSwitchTable;
     std::string name_;
@@ -105,6 +118,10 @@ private:
     // the reference till timeout or when all the local
     // macs are withdrawn
     KSyncEntryPtr local_mac_ref_;
+
+    // physical_locator create ref
+    KSyncEntryPtr pl_create_ref_;
+
     int64_t vxlan_id_;
     struct ovsdb_idl_row *mcast_local_row_;
     struct ovsdb_idl_row *mcast_remote_row_;
@@ -112,6 +129,7 @@ private:
     OvsdbIdlRowList ucast_local_row_list_;
     IpAddress tor_ip_;
     MulticastMacLocalEntry *mc_flood_entry_;
+    OvsdbResourceVxLanId res_vxlan_id_;
     DISALLOW_COPY_AND_ASSIGN(LogicalSwitchEntry);
 };
 };

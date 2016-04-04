@@ -60,6 +60,7 @@ from pysandesh.gen_py.process_info.ttypes import ConnectionType, \
     ConnectionStatus
 from cfgm_common.uve.cfgm_cpuinfo.ttypes import NodeStatusUVE, \
     NodeStatus
+from cStringIO import StringIO
 from cfgm_common.utils import cgitb_hook
 
 _BGP_RTGT_MAX_ID = 1 << 24
@@ -387,6 +388,7 @@ class VirtualNetworkST(DictST):
                     if old_rtgt_name in static_route.route_target:
                         static_route.route_target.remove(old_rtgt_name)
                         static_route.route_target.append(new_rtgt_name)
+                left_ri.obj.set_static_route_entries(static_route_entries)
                 _vnc_lib.routing_instance_update(left_ri.obj)
             try:
                 RouteTargetST.delete(old_rtgt_obj.get_fq_name()[0])
@@ -2418,9 +2420,14 @@ class VirtualMachineInterfaceST(DictST):
         if smode not in ['in-network', 'in-network-nat']:
             return
 
+        if smode == 'in-network-nat' and self.service_interface_type == 'right':
+            vn_policies = []
+        else:
+            vn_policies = vn.policies
+
         policy_rule_count = 0
         si_name = vm_obj.service_instance
-        for policy_name in vn.policies:
+        for policy_name in vn_policies:
             policy = NetworkPolicyST.get(policy_name)
             if policy is None:
                 continue
@@ -2798,6 +2805,7 @@ class SchemaTransformer(object):
         vn_id_list = [vn.uuid for vn in vn_list]
         ri_list = _vnc_lib.routing_instances_list(detail=True)
         ri_dict = {}
+        ri_deleted = {}
         for ri in ri_list:
             delete = False
             if ri.parent_uuid not in vn_id_list:
@@ -2808,6 +2816,7 @@ class SchemaTransformer(object):
                 sc_id = VirtualNetworkST._get_service_id_from_ri(ri.name)
                 if sc_id and sc_id not in ServiceChain:
                     delete = True
+                    ri_deleted.setdefault(ri.parent_uuid, []).append(ri.uuid)
                 else:
                     ri_dict[ri.get_fq_name_str()] = ri
             if delete:
@@ -2855,30 +2864,60 @@ class SchemaTransformer(object):
                             acl.uuid, str(e))
         # end for acl
 
-        gevent.sleep(0.001)
-        for sg in sg_list:
+        _SLEEP_TIMEOUT=0.001
+        start_time = time.time()
+        for index, sg in enumerate(sg_list):
             SecurityGroupST.locate(sg.get_fq_name_str(), sg, sg_acl_dict)
-        gevent.sleep(0.001)
+            if not index % 100:
+                gevent.sleep(_SLEEP_TIMEOUT)
+        elapsed_time = time.time() - start_time
+        _sandesh._logger.info("Initialized %d security groups in %.3f", len(sg_list), elapsed_time)
+
         rt_list = _vnc_lib.route_targets_list()['route-targets']
-        for rt in rt_list:
+        start_time = time.time()
+        for index, rt in enumerate(rt_list):
             rt_name = ':'.join(rt['fq_name'])
             RouteTargetST.locate(rt_name, RouteTarget(rt_name))
-        for vn in vn_list:
+            if not index % 100:
+                gevent.sleep(_SLEEP_TIMEOUT)
+        elapsed_time = time.time() - start_time
+        _sandesh._logger.info("Initialized %d route targets in %.3f", len(rt_list), elapsed_time)
+
+        start_time = time.time()
+        for index, vn in enumerate(vn_list):
+            if vn.uuid in ri_deleted:
+                vn_ri_list = vn.get_routing_instances() or []
+                new_vn_ri_list = [vn_ri for vn_ri in vn_ri_list
+                                  if vn_ri['uuid'] not in ri_deleted[vn.uuid]]
+                vn.routing_instances = new_vn_ri_list
             VirtualNetworkST.locate(vn.get_fq_name_str(), vn, vn_acl_dict,
                                     ri_dict)
-        gevent.sleep(0.001)
-        vmi_list = _vnc_lib.virtual_machine_interfaces_list(detail=True)
-        for vmi in vmi_list:
-            VirtualMachineInterfaceST.locate(vmi.get_fq_name_str(), vmi)
+            if not index % 100:
+                gevent.sleep(_SLEEP_TIMEOUT)
+        elapsed_time = time.time() - start_time
+        _sandesh._logger.info("Initialized %d virtual networks in %.3f", len(vn_list), elapsed_time)
 
-        gevent.sleep(0.001)
+        vmi_list = _vnc_lib.virtual_machine_interfaces_list(detail=True)
+        start_time = time.time()
+        for index, vmi in enumerate(vmi_list):
+            VirtualMachineInterfaceST.locate(vmi.get_fq_name_str(), vmi)
+            if not index % 100:
+                gevent.sleep(_SLEEP_TIMEOUT)
+        elapsed_time = time.time() - start_time
+        _sandesh._logger.info("Initialized %d virtual machine interfaces in %.3f", len(vmi_list), elapsed_time)
+
         vm_list = _vnc_lib.virtual_machines_list(detail=True)
-        for vm in vm_list:
+        start_time = time.time()
+        for index, vm in enumerate(vm_list):
             si_refs = vm.get_service_instance_refs()
             if si_refs:
                 si_fq_name_str = ':'.join(si_refs[0]['to'])
                 VirtualMachineST.locate(vm.get_fq_name_str(), 
                    si_fq_name_str)
+            if not index % 100:
+                gevent.sleep(_SLEEP_TIMEOUT)
+        elapsed_time = time.time() - start_time
+        _sandesh._logger.info("Initialized %d virtual machines in %.3f", len(vm_list), elapsed_time)
     # end reinit
 
     def cleanup(self):

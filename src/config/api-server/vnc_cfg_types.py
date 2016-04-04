@@ -7,7 +7,7 @@
 # to type of resource. For eg. allocation of mac/ip-addr for a port during its
 # creation.
 
-import json
+from cfgm_common import jsonutils as json
 import re
 
 import cfgm_common
@@ -390,32 +390,8 @@ class VirtualMachineInterfaceServer(VirtualMachineInterfaceServerGen):
         mac_addrs_dict = json.loads(mac_addrs_json)
         obj_dict['virtual_machine_interface_mac_addresses'] = mac_addrs_dict
 
-        if 'virtual_machine_interface_allowed_address_pairs' in obj_dict:
-            aap_config = obj_dict['virtual_machine_interface_allowed_address_pairs']
-            if 'allowed_address_pair' in aap_config:
-                aaps = aap_config['allowed_address_pair']
-                for aap in aaps or []:
-                    if aap['mac'] == "":
-                        aap['mac'] = obj_dict['virtual_machine_interface_mac_addresses']['mac_address'][0]
         return True, ""
     # end http_post_collection
-
-    @classmethod
-    def http_put(cls, id, fq_name, obj_dict, db_conn):
-        if 'virtual_machine_interface_allowed_address_pairs' in obj_dict:
-            vmi_id = {'uuid': id}
-            (read_ok, read_result) = db_conn.dbe_read('virtual-machine-interface', vmi_id)
-            if not read_ok:
-                return (False, (500, read_result))
-
-            aap_config = obj_dict['virtual_machine_interface_allowed_address_pairs']
-            if 'allowed_address_pair' in aap_config:
-                aaps = aap_config['allowed_address_pair']
-                for aap in aaps or []:
-                    if aap['mac'] == "":
-                        aap['mac'] = read_result['virtual_machine_interface_mac_addresses']['mac_address'][0]
-        return True, ""
-    # end http_put
 # end class VirtualMachineInterfaceServer
 
 
@@ -969,7 +945,7 @@ class VirtualDnsRecordServer(VirtualDnsRecordServerGen):
     # end validate_dns_record
 # end class VirtualDnsRecordServer
 
-def _check_policy_rules(entries):
+def _check_policy_rules(entries, network_policy_rule=False):
     if not entries:
         return True, ""
     for rule in entries.get('policy_rule') or []:
@@ -978,13 +954,16 @@ def _check_policy_rules(entries):
         protocol = rule['protocol']
         if protocol.isdigit():
             if int(protocol) < 0 or int(protocol) > 255:
-                return (False, (400, 'Rule with invalid protocol : %s' % \
-                    rule['protocol']))
+                return (False, (400, 'Rule with invalid protocol : %s' %
+                                protocol))
         else:
             valids = ['any', 'icmp', 'tcp', 'udp']
             if protocol not in valids:
-                return (False, (400, 'Rule with invalid protocol : %s' % \
-                    rule['protocol']))
+                return (False, (400, 'Rule with invalid protocol : %s' %
+                                protocol))
+        if network_policy_rule:
+            if rule.get('action_list') is None:
+                return (False, (400, 'Action is required'))
     return True, ""
 # end _check_policy_rules
 
@@ -1059,12 +1038,7 @@ class NetworkPolicyServer(NetworkPolicyServerGen):
         if not ok:
             return (ok, response)
 
-        try:
-            cls._check_policy(obj_dict)
-        except Exception as e:
-            return (False, (500, str(e)))
-
-        return _check_policy_rules(obj_dict.get('network_policy_entries'))
+        return _check_policy_rules(obj_dict.get('network_policy_entries'), True)
     # end http_post_collection
 
     @classmethod
@@ -1074,15 +1048,8 @@ class NetworkPolicyServer(NetworkPolicyServerGen):
         if not read_ok:
             return (False, (500, read_result))
 
-        return _check_policy_rules(obj_dict.get('network_policy_entries'))
+        return _check_policy_rules(obj_dict.get('network_policy_entries'), True)
     # end http_put
-
-    @classmethod
-    def _check_policy(cls, obj_dict):
-        entries = obj_dict.get('network_policy_entries')
-        if not entries:
-            return
-    # end _check_policy
 
 # end class NetworkPolicyServer
 

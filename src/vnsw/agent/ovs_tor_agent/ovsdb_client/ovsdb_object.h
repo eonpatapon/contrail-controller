@@ -22,7 +22,6 @@ public:
     OvsdbObject(OvsdbClientIdl *idl);
     virtual ~OvsdbObject();
 
-    bool IsActiveEntry(KSyncEntry *entry);
     KSyncEntry *FindActiveEntry(KSyncEntry *key);
     // Trigger delete of object table
     void DeleteTable(void);
@@ -87,6 +86,7 @@ protected:
 private:
     friend class OvsdbDBEntry;
     DBTableWalker::WalkId walkid_;
+    bool delete_triggered_;
     DISALLOW_COPY_AND_ASSIGN(OvsdbDBObject);
 };
 };

@@ -211,14 +211,14 @@ TEST_F(TestAap, SubnetGw) {
     EXPECT_TRUE(RouteFind("vrf1", ip1, 32));
 
     IpamInfo ipam_info[] = {
-        {"10.10.10.0", 24, "10.10.10.200", true},
+        {"10.10.10.0", 24, "10.10.10.200", true, "10.10.10.201"}
     };
     AddIPAM("vn1", ipam_info, 1, NULL, "vdns1");
     client->WaitForIdle();
 
-    Ip4Address subnet_gw_ip = Ip4Address::from_string("10.10.10.200");
+    Ip4Address subnet_service_ip = Ip4Address::from_string("10.10.10.201");
     InetUnicastRouteEntry *rt = RouteGet("vrf1", ip1, 32);
-    EXPECT_TRUE(rt->GetActivePath()->subnet_gw_ip() == subnet_gw_ip);
+    EXPECT_TRUE(rt->GetActivePath()->subnet_service_ip() == subnet_service_ip);
 
     DelIPAM("vn1", "vdns1");
     client->WaitForIdle();
@@ -261,6 +261,23 @@ TEST_F(TestAap, EvpnRoute_1) {
     EXPECT_TRUE(vm_intf->allowed_address_pair_list().list_.size() == 1);
     AddAap("intf1", 1, Ip4Address(0), zero_mac.ToString());
     EXPECT_TRUE(vm_intf->allowed_address_pair_list().list_.size() == 0);
+}
+
+TEST_F(TestAap, EvpnRoute_with_mac_change) {
+    Ip4Address ip = Ip4Address::from_string("10.10.10.10");
+    MacAddress mac("0a:0b:0c:0d:0e:0f");
+    MacAddress mac1("0a:0b:0c:0d:0e:0e");
+
+    VmInterface *vm_intf = static_cast<VmInterface *>(VmPortGet(1));
+    AddAap("intf1", 1, ip, mac.ToString());
+    EXPECT_TRUE(RouteFind("vrf1", ip, 32));
+    EXPECT_TRUE(EvpnRouteGet("vrf1", mac, ip, 0));
+    EXPECT_TRUE(vm_intf->allowed_address_pair_list().list_.size() == 1);
+
+    AddAap("intf1", 1, ip, mac1.ToString());
+    EXPECT_TRUE(RouteFind("vrf1", ip, 32));
+    EXPECT_FALSE(EvpnRouteGet("vrf1", mac, ip, 0));
+    EXPECT_TRUE(EvpnRouteGet("vrf1", mac1, ip, 0));
 }
 
 #if 0

@@ -431,7 +431,7 @@ AgentPath *InetUnicastRouteEntry::AllocateEcmpPath(Agent *agent,
 
     RouteInfo rt_info;
     FillTrace(rt_info, AgentRoute::CHANGE_PATH, path);
-    OPER_TRACE(Route, rt_info);
+    ROUTE_OPER_TRACE(Route, rt_info);
     AGENT_ROUTE_LOG("Path change", ToString(), vrf()->GetName(),
                     GETPEERNAME(agent->ecmp_peer()));
 
@@ -649,7 +649,7 @@ void InetUnicastRouteEntry::AppendEcmpPath(Agent *agent, AgentPath *path) {
 
     RouteInfo rt_info;
     FillTrace(rt_info, AgentRoute::CHANGE_PATH, path);
-    OPER_TRACE(Route, rt_info);
+    ROUTE_OPER_TRACE(Route, rt_info);
     AGENT_ROUTE_LOG("Path change", ToString(), vrf()->GetName(),
                     GETPEERNAME(agent->ecmp_peer()));
 }
@@ -688,7 +688,7 @@ void InetUnicastRouteEntry::DeleteComponentNH(Agent *agent, AgentPath *path) {
 
     RouteInfo rt_info;
     FillTrace(rt_info, AgentRoute::CHANGE_PATH, path);
-    OPER_TRACE(Route, rt_info);
+    ROUTE_OPER_TRACE(Route, rt_info);
     AGENT_ROUTE_LOG("Path change", ToString(), vrf()->GetName(),
                     GETPEERNAME(agent->ecmp_peer()));
 }
@@ -1095,12 +1095,12 @@ InetUnicastAgentRouteTable::AddLocalVmRouteReq(const Peer *peer,
                                                bool force_policy,
                                                const PathPreference
                                                &path_preference,
-                                               const IpAddress &subnet_gw_ip) {
+                                               const IpAddress &subnet_service_ip) {
     VmInterfaceKey intf_key(AgentKey::ADD_DEL_CHANGE, intf_uuid, "");
     LocalVmRoute *data = new LocalVmRoute(intf_key, label,
                                     VxLanTable::kInvalidvxlan_id, force_policy,
                                     vn_name, InterfaceNHFlags::INET4, sg_list,
-                                    path_preference, subnet_gw_ip);
+                                    path_preference, subnet_service_ip);
 
     AddLocalVmRouteReq(peer, vm_vrf, addr, plen, data);
 }
@@ -1131,7 +1131,7 @@ InetUnicastAgentRouteTable::AddLocalVmRoute(const Peer *peer,
                                             bool force_policy,
                                             const PathPreference
                                             &path_preference,
-                                            const IpAddress &subnet_gw_ip) {
+                                            const IpAddress &subnet_service_ip) {
     DBRequest req(DBRequest::DB_ENTRY_ADD_CHANGE);
     req.key.reset(new InetUnicastRouteKey(peer, vm_vrf, addr, plen));
 
@@ -1139,7 +1139,7 @@ InetUnicastAgentRouteTable::AddLocalVmRoute(const Peer *peer,
     req.data.reset(new LocalVmRoute(intf_key, label, VxLanTable::kInvalidvxlan_id,
                                     force_policy, vn_name,
                                     InterfaceNHFlags::INET4, sg_list,
-                                    path_preference, subnet_gw_ip));
+                                    path_preference, subnet_service_ip));
     InetUnicastTableProcess(Agent::GetInstance(), vm_vrf, req);
 }
 

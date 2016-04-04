@@ -14,13 +14,13 @@ class BridgeRouteEntry;
 
 namespace OVSDB {
 class VrfOvsdbObject;
+class VrfOvsdbEntry;
 
 class UnicastMacRemoteTable : public OvsdbDBObject {
 public:
     UnicastMacRemoteTable(OvsdbClientIdl *idl,
-                          const std::string &logical_switch_name);
-    UnicastMacRemoteTable(OvsdbClientIdl *idl, AgentRouteTable *table,
-                          const std::string &logical_switch_name);
+                          const std::string &logical_switch_name,
+                          VrfOvsdbEntry *vrf);
     virtual ~UnicastMacRemoteTable();
 
     virtual void OvsdbRegisterDBTable(DBTable *tbl);
@@ -42,6 +42,7 @@ public:
 private:
     std::string logical_switch_name_;
     LifetimeRef<UnicastMacRemoteTable> table_delete_ref_;
+    VrfOvsdbEntry *vrf_;
     DISALLOW_COPY_AND_ASSIGN(UnicastMacRemoteTable);
 };
 
@@ -61,6 +62,7 @@ public:
                           const UnicastMacRemoteEntry *key);
     UnicastMacRemoteEntry(UnicastMacRemoteTable *table,
                           struct ovsdb_idl_row *entry);
+    virtual ~UnicastMacRemoteEntry();
 
     // OVSDB schema does not consider a key for unicast mac remote entry
     // so over-ride the default behaviour of NotifyAdd and NotifyDelete
@@ -90,11 +92,23 @@ public:
     uint32_t self_sequence() const;
     bool ecmp_suppressed() const;
 
+    // Override Ack api to get trigger on Ack
+    void Ack(bool success);
+
+    // Override TxnDoneNoMessage to get triggers for no message
+    // transaction complete
+    void TxnDoneNoMessage();
+
 private:
     friend class UnicastMacRemoteTable;
     friend class VrfOvsdbObject;
     void SendTrace(Trace event) const;
     void DeleteDupEntries(struct ovsdb_idl_txn *);
+
+    void ReleaseLocatorCreateReference();
+
+    // physical_locator create ref
+    KSyncEntryPtr pl_create_ref_;
 
     std::string mac_;
     std::string logical_switch_name_;

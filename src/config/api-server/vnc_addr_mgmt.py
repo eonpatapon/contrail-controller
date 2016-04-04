@@ -6,7 +6,7 @@ import copy
 from netaddr import *
 from vnc_quota import *
 from pprint import pformat
-import json
+from cfgm_common import jsonutils as json
 import cfgm_common.exceptions
 try:
     #python2.7
@@ -243,7 +243,9 @@ class Subnet(object):
             if alloc_int['start'] <= int(service_node_address) <= alloc_int['end']:
                 exclude.append(service_node_address)
         self._db_conn.subnet_create_allocator(name, alloc_int_list,
-                                              addr_from_start)
+                                              addr_from_start,
+                                              network.first,
+                                              network.size)
 
         # reserve excluded addresses
         for addr in exclude:

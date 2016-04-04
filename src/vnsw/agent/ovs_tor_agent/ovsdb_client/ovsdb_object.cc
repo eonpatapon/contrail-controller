@@ -20,13 +20,9 @@ OvsdbObject::OvsdbObject(OvsdbClientIdl *idl) : KSyncObject(),
 OvsdbObject::~OvsdbObject() {
 }
 
-bool OvsdbObject::IsActiveEntry(KSyncEntry *entry) {
-    return (entry->GetState() != KSyncEntry::TEMP && !entry->IsDeleted());
-}
-
 KSyncEntry *OvsdbObject::FindActiveEntry(KSyncEntry *key) {
     KSyncEntry *entry = Find(key);
-    if (entry != NULL && IsActiveEntry(entry)) {
+    if (entry != NULL && entry->IsActive()) {
         return entry;
     }
     return NULL;
@@ -47,7 +43,8 @@ void OvsdbObject::EmptyTable(void) {
 
 OvsdbDBObject::OvsdbDBObject(OvsdbClientIdl *idl,
                              bool init_stale_entry_cleanup) : KSyncDBObject(),
-    client_idl_(idl), walkid_(DBTableWalker::kInvalidWalkerId) {
+    client_idl_(idl), walkid_(DBTableWalker::kInvalidWalkerId),
+    delete_triggered_(false) {
     if (init_stale_entry_cleanup) {
         InitStaleEntryCleanup(*(idl->agent()->event_manager())->io_service(),
                               StaleEntryCleanupTimer, StaleEntryYeildTimer,
@@ -58,7 +55,7 @@ OvsdbDBObject::OvsdbDBObject(OvsdbClientIdl *idl,
 OvsdbDBObject::OvsdbDBObject(OvsdbClientIdl *idl, DBTable *tbl,
                              bool init_stale_entry_cleanup) :
     KSyncDBObject(tbl), client_idl_(idl),
-    walkid_(DBTableWalker::kInvalidWalkerId) {
+    walkid_(DBTableWalker::kInvalidWalkerId), delete_triggered_(false) {
     DBTableWalker *walker = client_idl_->agent()->db()->GetWalker();
     // Start a walker to get the entries which were already present,
     // when we register to the DB Table
@@ -112,6 +109,11 @@ void OvsdbDBObject::NotifyAddOvsdb(OvsdbDBEntry *key, struct ovsdb_idl_row *row)
         del_entry->NotifyAdd(row);
         // entry created by AllocOvsEntry should always be stale
         assert(del_entry->stale());
+        // if delete of table is already triggered delete the created
+        // stale entry immediately
+        if (delete_triggered_) {
+            Delete(del_entry);
+        }
     }
 }
 
@@ -144,6 +146,9 @@ Agent *OvsdbDBObject::agent() const {
 }
 
 void OvsdbDBObject::DeleteTable(void) {
+    // validate delete should not be triggered twice for an object
+    assert(!delete_triggered_);
+    delete_triggered_ = true;
     if (client_idl_ != NULL) {
         client_idl_->ksync_obj_manager()->Delete(this);
     } else {

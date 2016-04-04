@@ -3,7 +3,7 @@
 #
 
 import bottle
-import json
+from cfgm_common import jsonutils as json
 from pprint import pformat
 import string
 import ConfigParser
@@ -258,6 +258,9 @@ class NeutronPluginInterface(object):
                                for route in subnet['routes']],
                'shared': subnet['shared']
                }
+
+        if 'contrail:dns_server_address' in subnet:
+            res['contrail:dns_server_address'] = subnet['contrail:dns_server_address']
         return res
 
     # Subnet API Handling
