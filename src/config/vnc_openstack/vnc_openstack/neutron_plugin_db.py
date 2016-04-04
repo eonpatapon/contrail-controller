@@ -8,7 +8,7 @@ import copy
 import requests
 import re
 import uuid
-from cfgm_common import jsonutils as json
+import json
 import time
 import socket
 import netaddr

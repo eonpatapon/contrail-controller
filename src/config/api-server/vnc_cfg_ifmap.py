@@ -34,7 +34,7 @@ from cfgm_common.vnc_kombu import VncKombuClient
 from cfgm_common.utils import cgitb_hook
 
 import copy
-from cfgm_common import jsonutils as json
+import json
 import uuid
 import datetime
 import pycassa

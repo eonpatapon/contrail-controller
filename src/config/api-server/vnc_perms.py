@@ -2,7 +2,7 @@
 # Copyright (c) 2013 Juniper Networks, Inc. All rights reserved.
 #
 import sys
-from cfgm_common import jsonutils as json
+import json
 import string
 from provision_defaults import *
 from cfgm_common.exceptions import *

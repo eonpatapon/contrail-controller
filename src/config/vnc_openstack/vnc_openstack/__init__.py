@@ -2,7 +2,6 @@
 # Copyright (c) 2013 Juniper Networks, Inc. All rights reserved.
 #
 
-from cfgm_common import jsonutils as json
 import uuid
 import gevent
 import gevent.monkey

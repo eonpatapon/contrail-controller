@@ -3,7 +3,7 @@
 #
 
 import bottle
-from cfgm_common import jsonutils as json
+import json
 from pprint import pformat
 import string
 import ConfigParser
