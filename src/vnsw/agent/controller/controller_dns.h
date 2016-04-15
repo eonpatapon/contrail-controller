@@ -46,10 +46,10 @@ public:
     static void set_dns_xmpp_event_handler_cb(DnsXmppEventHandler cb);
     Agent *agent() const {return agent_;}
     void RegisterXmppChannel(XmppChannel *channel);
+    void ReceiveDnsMessage(std::auto_ptr<XmlBase> impl);
 
 protected:
-    virtual void WriteReadyCb(uint8_t *msg, 
-                              const boost::system::error_code &ec);
+    virtual void WriteReadyCb(const boost::system::error_code &ec);
 
 private:
     void ReceiveInternal(const XmppStanza::XmppMessage *msg);
