@@ -36,6 +36,7 @@ import cfgm_common as common
 from cfgm_common.exceptions import *
 from cfgm_common.imid import *
 from cfgm_common import svc_info
+from cfgm_common.utils import parallel_map
 
 from vnc_api.vnc_api import *
 
@@ -2513,16 +2514,20 @@ class FloatingIpST(DictST):
 class VirtualMachineST(DictST):
     _dict = {}
     _si_dict = {}
-    def __init__(self, name, si):
-        self.name = name
-        self.interfaces = set()
-        self.service_instance = si
-        self._si_dict.setdefault(si, []).append(name)
-        for vmi in VirtualMachineInterfaceST.values():
-            if vmi.virtual_machine == name:
-                self.add_interface(vmi.name)
-        self.obj = _vnc_lib.virtual_machine_read(fq_name_str=name)
+
+    def __init__(self, fq_name_str, si_fq_name_str, obj=None):
+        if obj is None:
+            self.obj = _vnc_lib.virtual_machine_read(fq_name_str=fq_name_str)
+        else:
+            self.obj = obj
         self.uuid = self.obj.uuid
+        self.name = fq_name_str
+        self.interfaces = set()
+        self.service_instance = si_fq_name_str
+        self._si_dict.setdefault(self.service_instance, []).append(self.name)
+        for vmi in VirtualMachineInterfaceST.values():
+            if vmi.virtual_machine == self.name:
+                self.add_interface(vmi.name)
     # end __init__
 
     @classmethod
@@ -2784,6 +2789,7 @@ class SchemaTransformer(object):
 
     # Clean up stale objects
     def reinit(self):
+        _sandesh._logger.info("Check for stale RIs")
         vn_list = _vnc_lib.virtual_networks_list(detail=True,
                                                  fields=['routing_instances',
                                                          'access_control_lists'])
@@ -2791,6 +2797,7 @@ class SchemaTransformer(object):
         ri_list = _vnc_lib.routing_instances_list(detail=True)
         ri_dict = {}
         ri_deleted = {}
+        ri_deleted_nb = 0
         for ri in ri_list:
             delete = False
             if ri.parent_uuid not in vn_id_list:
@@ -2808,21 +2815,24 @@ class SchemaTransformer(object):
                 try:
                     ri_obj = RoutingInstanceST(ri)
                     ri_obj.delete()
+                    ri_deleted_nb += 1
                 except NoIdError:
                     pass
                 except Exception as e:
                     _sandesh._logger.error(
                             "Error while deleting routing instance %s: %s",
                             ri.get_fq_name_str(), str(e))
-
+        _sandesh._logger.info("%d RIs cleaned" % ri_deleted_nb)
         # end for ri
 
+        _sandesh._logger.info("Check for stale ACLs")
         sg_list = _vnc_lib.security_groups_list(detail=True,
                                                 fields=['access_control_lists'])
         sg_id_list = [sg.uuid for sg in sg_list]
         acl_list = _vnc_lib.access_control_lists_list(detail=True)
         sg_acl_dict = {}
         vn_acl_dict = {}
+        acl_deleted_nb = 0
         for acl in acl_list or []:
             delete = False
             if acl.parent_type == 'virtual-network':
@@ -2841,35 +2851,25 @@ class SchemaTransformer(object):
             if delete:
                 try:
                     _vnc_lib.access_control_list_delete(id=acl.uuid)
+                    acl_deleted_nb += 1
                 except NoIdError:
                     pass
                 except Exception as e:
                     _sandesh._logger.error(
                             "Error while deleting acl %s: %s",
                             acl.uuid, str(e))
+        _sandesh._logger.info("%d ACLs cleaned" % acl_deleted_nb)
         # end for acl
 
-        _SLEEP_TIMEOUT=0.001
-        start_time = time.time()
-        for index, sg in enumerate(sg_list):
-            SecurityGroupST.locate(sg.get_fq_name_str(), sg, sg_acl_dict)
-            if not index % 100:
-                gevent.sleep(_SLEEP_TIMEOUT)
-        elapsed_time = time.time() - start_time
-        _sandesh._logger.info("Initialized %d security groups in %.3f", len(sg_list), elapsed_time)
+        def _store_sg(sg):
+            SecurityGroupST.locate(':'.join(sg['fq_name']))
 
-        rt_list = _vnc_lib.route_targets_list()['route-targets']
-        start_time = time.time()
-        for index, rt in enumerate(rt_list):
+        def _store_rt(rt):
             rt_name = ':'.join(rt['fq_name'])
             RouteTargetST.locate(rt_name, RouteTarget(rt_name))
-            if not index % 100:
-                gevent.sleep(_SLEEP_TIMEOUT)
-        elapsed_time = time.time() - start_time
-        _sandesh._logger.info("Initialized %d route targets in %.3f", len(rt_list), elapsed_time)
 
-        start_time = time.time()
-        for index, vn in enumerate(vn_list):
+        def _store_vn(vn):
+            vn = _vnc_lib.virtual_network_read(fq_name=vn['fq_name'])
             if vn.uuid in ri_deleted:
                 vn_ri_list = vn.get_routing_instances() or []
                 new_vn_ri_list = [vn_ri for vn_ri in vn_ri_list
@@ -2877,32 +2877,60 @@ class SchemaTransformer(object):
                 vn.routing_instances = new_vn_ri_list
             VirtualNetworkST.locate(vn.get_fq_name_str(), vn, vn_acl_dict,
                                     ri_dict)
-            if not index % 100:
-                gevent.sleep(_SLEEP_TIMEOUT)
-        elapsed_time = time.time() - start_time
-        _sandesh._logger.info("Initialized %d virtual networks in %.3f", len(vn_list), elapsed_time)
 
-        vmi_list = _vnc_lib.virtual_machine_interfaces_list(detail=True)
-        start_time = time.time()
-        for index, vmi in enumerate(vmi_list):
+        def _store_vmi(vmi):
+            vmi = _vnc_lib.virtual_machine_interface_read(fq_name=vmi['fq_name'])
             VirtualMachineInterfaceST.locate(vmi.get_fq_name_str(), vmi)
-            if not index % 100:
-                gevent.sleep(_SLEEP_TIMEOUT)
-        elapsed_time = time.time() - start_time
-        _sandesh._logger.info("Initialized %d virtual machine interfaces in %.3f", len(vmi_list), elapsed_time)
 
-        vm_list = _vnc_lib.virtual_machines_list(detail=True)
-        start_time = time.time()
-        for index, vm in enumerate(vm_list):
+        def _store_vm(vm):
+            vm = _vnc_lib.virtual_machine_read(fq_name=vm['fq_name'])
             si_refs = vm.get_service_instance_refs()
             if si_refs:
                 si_fq_name_str = ':'.join(si_refs[0]['to'])
-                VirtualMachineST.locate(vm.get_fq_name_str(), 
-                   si_fq_name_str)
-            if not index % 100:
-                gevent.sleep(_SLEEP_TIMEOUT)
-        elapsed_time = time.time() - start_time
-        _sandesh._logger.info("Initialized %d virtual machines in %.3f", len(vm_list), elapsed_time)
+                VirtualMachineST.locate(vm.get_fq_name_str(), si_fq_name_str,
+                                        obj=vm)
+
+        _sandesh._logger.info("Retrieving API resources")
+        _store = OrderedDict([
+            ('security-groups', {
+                'func': _store_sg,
+                'args': None,
+                'list': _vnc_lib.security_groups_list()['security-groups']
+            }),
+            ('route-targets', {
+                'func': _store_rt,
+                'args': None,
+                'list': _vnc_lib.route_targets_list()['route-targets']
+            }),
+            ('virtual-networks', {
+                'func': _store_vn,
+                'args': None,
+                'list': _vnc_lib.virtual_networks_list()['virtual-networks']
+            }),
+            ('virtual-machine-interfaces', {
+                'func': _store_vmi,
+                'args': None,
+                'list': _vnc_lib.virtual_machine_interfaces_list()['virtual-machine-interfaces']
+            }),
+            ('virtual-machines', {
+                'func': _store_vm,
+                'args': None,
+                'list': _vnc_lib.virtual_machines_list()['virtual-machines']
+            })
+        ])
+        _sandesh._logger.info("Retrieving API resources done")
+
+        for item in _store.keys():
+            start_time = time.time()
+            parallel_map(_store[item]['func'],
+                         _store[item]['list'],
+                         args=_store[item]['args'],
+                         workers=500)
+            elapsed_time = time.time() - start_time
+            _sandesh._logger.info("Initialized %d %s in %.3f",
+                                  len(_store[item]['list']),
+                                  item,
+                                  elapsed_time)
     # end reinit
 
     def cleanup(self):

@@ -28,6 +28,7 @@ import sys
 import cgitb
 import cStringIO
 import os
+from gevent.pool import Pool, Group
 
 
 # Masking of password from openstack/common/log.py
@@ -189,3 +190,31 @@ def getCertKeyCaBundle(bundle, certs):
     os.chmod(bundle,0o777)
     return bundle
 # end CreateCertKeyCaBundle
+
+
+def parallel_map(func, iterable, args=None, kwargs=None, workers=None):
+    """Map func on a list using gevent greenlets.
+
+    :param func: function applied on elements
+    :type func: function
+    :param iterable: elements to map the function over
+    :type iterable: iterable
+    :param args: supplementary arguments of func
+    :type args: tuple
+    :param kwargs: supplementary keywords arguments of func
+    :type kwargs: dict
+    :param workers: limit the number of greenlets
+                    running in parrallel
+    :type workers: int
+    """
+    if args is None:
+        args = ()
+    if kwargs is None:
+        kwargs = {}
+    if workers is not None:
+        pool = Pool(workers)
+    else:
+        pool = Group()
+    iterable = [pool.spawn(func, i, *args, **kwargs) for i in iterable]
+    pool.join()
+    return [i.value for i in iterable]
