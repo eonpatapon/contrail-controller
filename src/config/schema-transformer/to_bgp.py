@@ -1317,7 +1317,10 @@ class SecurityGroupST(DictST):
             else:
                 _vnc_lib.access_control_list_delete(id=acl['uuid'])
         config_id = self.obj.get_configured_security_group_id() or 0
+        start_time = time.time()
         self.set_configured_security_group_id(config_id)
+        elapsed_time = time.time() - start_time
+        _sandesh._logger.info("Initialized security group in %.3f", elapsed_time)
     # end __init__
 
     def set_configured_security_group_id(self, config_id):
