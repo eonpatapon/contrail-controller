@@ -130,10 +130,10 @@ class DictST(object):
     # end get
 
     @classmethod
-    def locate(cls, name, *args):
+    def locate(cls, name, *args, **kwargs):
         if name not in cls._dict:
             try:
-                cls._dict[name] = cls(name, *args)
+                cls._dict[name] = cls(name, *args, **kwargs)
             except NoIdError as e:
                 _sandesh._logger.error("Exception %s while creating %s for %s",
                                        e, cls.__name__, name)
@@ -2528,7 +2528,9 @@ class FloatingIpST(DictST):
 class VirtualMachineST(DictST):
     _dict = {}
     _si_dict = {}
-    def __init__(self, name, si):
+
+    def __init__(self, name, si, obj=None):
+        self.obj = obj or _vnc_lib.virtual_machine_read(fq_name_str=name)
         self.name = name
         self.interfaces = set()
         self.service_instance = si
@@ -2536,7 +2538,6 @@ class VirtualMachineST(DictST):
         for vmi in VirtualMachineInterfaceST.values():
             if vmi.virtual_machine == name:
                 self.add_interface(vmi.name)
-        self.obj = _vnc_lib.virtual_machine_read(fq_name_str=name)
         self.uuid = self.obj.uuid
     # end __init__
 
@@ -2761,6 +2762,10 @@ class SchemaTransformer(object):
                 ModuleNames[Module.SCHEMA_TRANSFORMER])
 
         _sandesh = Sandesh()
+        # Reset the sandesh send rate limit value
+        if args.sandesh_send_rate_limit is not None:
+            SandeshSystem.set_sandesh_send_rate_limit( \
+                args.sandesh_send_rate_limit)
         sandesh.VnList.handle_request = self.sandesh_vn_handle_request
         sandesh.RoutintInstanceList.handle_request = \
             self.sandesh_ri_handle_request
@@ -2913,7 +2918,7 @@ class SchemaTransformer(object):
             if si_refs:
                 si_fq_name_str = ':'.join(si_refs[0]['to'])
                 VirtualMachineST.locate(vm.get_fq_name_str(), 
-                   si_fq_name_str)
+                   si_fq_name_str, obj=vm)
             if not index % 100:
                 gevent.sleep(_SLEEP_TIMEOUT)
         elapsed_time = time.time() - start_time
@@ -3390,6 +3395,7 @@ class SchemaTransformer(object):
 
     def process_poll_result(self, poll_result_str):
         something_done = False
+        initial_search = False
         result_list = parse_poll_result(poll_result_str)
         self.current_network_set = set()
 
@@ -3397,9 +3403,9 @@ class SchemaTransformer(object):
         for (result_type, idents, metas) in result_list:
             if result_type != 'searchResult' and not self.ifmap_search_done:
                 self.ifmap_search_done = True
-                self.process_stale_objects()
-                self.current_network_set = VirtualNetworkST.keys()
+                self.current_network_set = set(VirtualNetworkST.keys())
                 something_done = True
+                initial_search = True
             for meta in metas:
                 meta_name = re.sub('{.*}', '', meta.tag)
                 if result_type == 'deleteResult':
@@ -3425,6 +3431,8 @@ class SchemaTransformer(object):
             return
         if self.ifmap_search_done:
             self.process_networks()
+        if initial_search:
+            self.process_stale_objects()
     # end process_poll_results
 
     def process_networks(self):
@@ -3814,9 +3822,9 @@ class SchemaTransformer(object):
 def set_ifmap_search_done(transformer):
     gevent.sleep(60)
     transformer.ifmap_search_done = True
-    transformer.process_stale_objects()
-    transformer.current_network_set = list(VirtualNetworkST.keys())
+    transformer.current_network_set = set(VirtualNetworkST.keys())
     transformer.process_networks()
+    transformer.process_stale_objects()
 # end set_ifmap_search_done
 
 def launch_arc(transformer, ssrc_mapc):
@@ -3924,6 +3932,7 @@ def parse_args(args_str):
         'use_syslog': False,
         'syslog_facility': Sandesh._DEFAULT_SYSLOG_FACILITY,
         'cluster_id': '',
+        'sandesh_send_rate_limit': SandeshSystem.get_sandesh_send_rate_limit(),
     }
     secopts = {
         'use_certs': False,
@@ -4020,6 +4029,8 @@ def parse_args(args_str):
                         help="Tenant name for keystone admin user")
     parser.add_argument("--cluster_id",
                         help="Used for database keyspace separation")
+    parser.add_argument("--sandesh_send_rate_limit", type=int,
+            help="Sandesh send rate limit in messages/sec")
     args = parser.parse_args(remaining_argv)
     if type(args.cassandra_server_list) is str:
         args.cassandra_server_list = args.cassandra_server_list.split()
