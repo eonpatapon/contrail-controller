@@ -2873,7 +2873,7 @@ class SchemaTransformer(object):
         start_time = time.time()
         for index, sg in enumerate(sg_list):
             SecurityGroupST.locate(sg.get_fq_name_str(), sg, sg_acl_dict)
-            if not index % 100:
+            if not index % 20:
                 gevent.sleep(_SLEEP_TIMEOUT)
         elapsed_time = time.time() - start_time
         _sandesh._logger.info("Initialized %d security groups in %.3f", len(sg_list), elapsed_time)
@@ -2883,7 +2883,7 @@ class SchemaTransformer(object):
         for index, rt in enumerate(rt_list):
             rt_name = ':'.join(rt['fq_name'])
             RouteTargetST.locate(rt_name, RouteTarget(rt_name))
-            if not index % 100:
+            if not index % 20:
                 gevent.sleep(_SLEEP_TIMEOUT)
         elapsed_time = time.time() - start_time
         _sandesh._logger.info("Initialized %d route targets in %.3f", len(rt_list), elapsed_time)
@@ -2897,7 +2897,7 @@ class SchemaTransformer(object):
                 vn.routing_instances = new_vn_ri_list
             VirtualNetworkST.locate(vn.get_fq_name_str(), vn, vn_acl_dict,
                                     ri_dict)
-            if not index % 100:
+            if not index % 20:
                 gevent.sleep(_SLEEP_TIMEOUT)
         elapsed_time = time.time() - start_time
         _sandesh._logger.info("Initialized %d virtual networks in %.3f", len(vn_list), elapsed_time)
@@ -2906,7 +2906,7 @@ class SchemaTransformer(object):
         start_time = time.time()
         for index, vmi in enumerate(vmi_list):
             VirtualMachineInterfaceST.locate(vmi.get_fq_name_str(), vmi)
-            if not index % 100:
+            if not index % 20:
                 gevent.sleep(_SLEEP_TIMEOUT)
         elapsed_time = time.time() - start_time
         _sandesh._logger.info("Initialized %d virtual machine interfaces in %.3f", len(vmi_list), elapsed_time)
@@ -2919,7 +2919,7 @@ class SchemaTransformer(object):
                 si_fq_name_str = ':'.join(si_refs[0]['to'])
                 VirtualMachineST.locate(vm.get_fq_name_str(), 
                    si_fq_name_str, obj=vm)
-            if not index % 100:
+            if not index % 20:
                 gevent.sleep(_SLEEP_TIMEOUT)
         elapsed_time = time.time() - start_time
         _sandesh._logger.info("Initialized %d virtual machines in %.3f", len(vm_list), elapsed_time)
