@@ -12,7 +12,7 @@ import gevent
 # Import kazoo.client before monkey patching
 from cfgm_common.zkclient import ZookeeperClient,IndexAllocator
 from gevent import monkey
-monkey.patch_all()
+monkey.patch_all(thread=False)
 import sys
 reload(sys)
 sys.setdefaultencoding('UTF8')
@@ -62,6 +62,8 @@ from cfgm_common.uve.cfgm_cpuinfo.ttypes import NodeStatusUVE, \
     NodeStatus
 from cStringIO import StringIO
 from cfgm_common.utils import cgitb_hook
+
+from kazoo.handlers.threading import SequentialThreadingHandler
 
 _BGP_RTGT_MAX_ID = 1 << 24
 _BGP_RTGT_ALLOC_PATH = "/id/bgp/route-targets/"
@@ -4092,7 +4094,8 @@ def main(args_str=None):
     else:
         client_pfx = ''
         zk_path_pfx = ''
-    _zookeeper_client = ZookeeperClient(client_pfx+"schema", args.zk_server_ip)
+    _zookeeper_client = ZookeeperClient(client_pfx+"schema", args.zk_server_ip,
+                                        zk_handler=SequentialThreadingHandler())
     _zookeeper_client.master_election(zk_path_pfx+"/schema-transformer",
                                       os.getpid(), run_schema_transformer,
                                       args)
