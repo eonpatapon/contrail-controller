@@ -596,12 +596,15 @@ class VirtualNetworkST(DictST):
     def _backup_user_defined_rt(self, route_target_list):
         rt_list = []
         for rt in route_target_list or []:
-            if rt['to'][0] in self.rt_list:
-                continue
-            elif rt['to'][0].split(':')[1] != str(self.get_autonomous_system()):
-                rt_list.append((rt['to'][0], rt['attr']))
-            elif int(rt['to'][0].split(':')[-1]) < common.BGP_RTGT_MIN_ID:
-                rt_list.append((rt['to'][0], rt['attr']))
+            try:
+                if rt['to'][0] in self.rt_list:
+                    continue
+                elif rt['to'][0].split(':')[1] != str(self.get_autonomous_system()):
+                    rt_list.append((rt['to'][0], rt['attr']))
+                elif int(rt['to'][0].split(':')[-1]) < common.BGP_RTGT_MIN_ID:
+                    rt_list.append((rt['to'][0], rt['attr']))
+            except IndexError:
+                _sandesh._logger.error("Failed to parse RT %s of RI %s" % (str(rt), ri_obj.uuid))
         return rt_list
 
     def locate_routing_instance(self, rinst_name, service_chain=None,
