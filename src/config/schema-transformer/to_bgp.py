@@ -593,7 +593,7 @@ class VirtualNetworkST(DictST):
         return rinst
     # end locate_routing_instance_no_target
 
-    def _backup_user_defined_rt(self, route_target_list):
+    def _backup_user_defined_rt(self, route_target_list, ri_obj):
         rt_list = []
         for rt in route_target_list or []:
             try:
@@ -653,7 +653,7 @@ class VirtualNetworkST(DictST):
                     _vnc_lib.routing_instance_delete(id=rinst_obj.uuid)
                     rinst_obj = None
                 else:
-                    user_defined_rt = self._backup_user_defined_rt(rinst_obj.get_route_target_refs())
+                    user_defined_rt = self._backup_user_defined_rt(rinst_obj.get_route_target_refs(), rinst_obj)
                     rinst_obj.set_route_target(rtgt_obj, InstanceTargetType())
                     rinst_obj.set_routing_instance_is_default(is_default)
                     if inst_tgt_data:
