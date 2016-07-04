@@ -82,7 +82,7 @@ class SNATAgent(Agent):
 
     def _get_net_uuids(self, vmi_uuids):
          return [
-             VirtualMachineInterfaceSM.get(uuid).virtual_network
+             VirtualMachineInterfaceSM.locate(uuid).virtual_network
              for uuid in vmi_uuids]
 
     def _virtual_network_read(self, net_uuid):
