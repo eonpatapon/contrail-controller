@@ -36,6 +36,7 @@ struct XmppStatsInfo {
     2: u64 in_msgs;
     3: u64 out_msgs;
     4: u16 reconnect;
+    5: u64 config_in_msgs;
 }
 
 response sandesh XmppStatsResp {
@@ -117,6 +118,7 @@ struct SandeshFlowData {
     48: optional string tunnel_type;
     49: optional u16 underlay_source_port;
     50: bool enable_rpf;
+    51: i32 short_flow_reason;    
 }
 
 struct LinkLocalFlowInfo {
@@ -212,6 +214,7 @@ struct FlowInfo {
    32: bool l3_flow;
    33: string smac;
    34: string dmac;
+   35: u32 short_flow_reason;    
 }
 
 traceobject sandesh FlowTrace {

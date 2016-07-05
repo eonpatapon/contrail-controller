@@ -72,7 +72,11 @@ int main(int argc, char *argv[]) {
         return ret;
     }
 
-    agent->event_manager()->RunWithExceptionHandling();
+    // Wait till Init is done, before running event manager
+    init.Lock();
 
+    agent->event_manager()->Run();
+
+    init.Unlock();
     return 0;
 }

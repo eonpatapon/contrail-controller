@@ -540,6 +540,14 @@ done:
 void FlowEntry::SetVrfAssignEntry() {
     if (!(data_.match_p.vrf_assign_acl_action &
          (1 << TrafficAction::VRF_TRANSLATE))) {
+        //If VRF assign was evaluated and the vrf translate
+        //action is not present in latest evaluation mark the
+        //flow as short flow
+        if (data_.vrf_assign_evaluated &&
+            data_.match_p.action_info.vrf_translate_action_.vrf_name()
+            != Agent::NullString()) {
+            MakeShortFlow(SHORT_VRF_CHANGE);
+        }
         data_.vrf_assign_evaluated = true;
         data_.acl_assigned_vrf_index_ = VrfEntry::kInvalidIndex;
         return;
@@ -557,12 +565,13 @@ void FlowEntry::SetVrfAssignEntry() {
         bool ignore_acl = acl_it->action_info.vrf_translate_action_.ignore_acl();
         data_.match_p.action_info.vrf_translate_action_.set_ignore_acl(ignore_acl);
     }
+
     if (data_.vrf_assign_evaluated && vrf_assigned_name !=
         data_.match_p.action_info.vrf_translate_action_.vrf_name()) {
         MakeShortFlow(SHORT_VRF_CHANGE);
     }
     set_acl_assigned_vrf_index();
-    if (acl_assigned_vrf_index() == 0) {
+    if (acl_assigned_vrf_index() == VrfEntry::kInvalidIndex) {
         MakeShortFlow(SHORT_VRF_CHANGE);
     }
     data_.vrf_assign_evaluated = true;
@@ -1197,6 +1206,7 @@ void FlowEntry::FillFlowInfo(FlowInfo &info) {
     info.set_mirror_vrf(data_.mirror_vrf);
     info.set_implicit_deny(ImplicitDenyFlow());
     info.set_short_flow(is_flags_set(FlowEntry::ShortFlow));
+    info.set_short_flow_reason(short_flow_reason_);
     if (is_flags_set(FlowEntry::EcmpFlow) && 
             data_.component_nh_idx != CompositeNH::kInvalidComponentNHIdx) {
         info.set_ecmp_index(data_.component_nh_idx);
@@ -1328,13 +1338,6 @@ bool FlowEntry::SetRpfNHState(FlowTable *ft, const NextHop *nh) {
         }
     }
 
-    if (data_.nh_state_ && nh) {
-        if (data_.nh_state_->nh()->GetType() != NextHop::COMPOSITE &&
-                nh->GetType() == NextHop::COMPOSITE) {
-            set_flags(FlowEntry::Trap);
-        }
-    }
-
     if (data_.nh_state_ != nh_state) {
         data_.nh_state_ = nh_state;
         return true;
@@ -1461,7 +1464,6 @@ bool FlowEntry::InitFlowCmn(const PktFlowInfo *info, const PktControlInfo *ctrl,
     data_.out_vm_entry = rev_ctrl->vm_ ? rev_ctrl->vm_ : NULL;
     l3_flow_ = info->l3_flow;
     data_.ecmp_rpf_nh_ = 0;
-    data_.acl_assigned_vrf_index_ = VrfEntry::kInvalidIndex;
     return true;
 }
 
@@ -2220,8 +2222,8 @@ void InetRouteFlowUpdate::RouteDel(AgentRoute *entry) {
 
     RouteFlowInfo rt_key(RouteFlowKey(route->vrf()->vrf_id(), route->addr(),
                                       route->plen()));
-    RouteFlowInfo *rt_info =
-        agent->pkt()->flow_table()->FindRouteFlowInfo(&rt_key);
+    FlowTable *table = agent->pkt()->flow_table();
+    RouteFlowInfo *rt_info = table->route_flow_tree_.Find(&rt_key);
     agent->pkt()->flow_table()->FlowRecompute(rt_info, NULL);
 }
 
@@ -3865,11 +3867,6 @@ void FlowTable::SetComponentIndex(FlowEntry *fe, const NextHopKey *nh_key,
     }
 
     const NextHop *nh = rt->GetActiveNextHop();
-    if (nh->GetType() != NextHop::COMPOSITE) {
-        rflow->set_ecmp_rpf_nh(this, 0);
-        return;
-    }
-
     //Set composite NH based on local mpls label flow
     if (mpls_path_select) {
         nh = rt->GetLocalNextHop();

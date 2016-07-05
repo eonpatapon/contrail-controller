@@ -226,25 +226,26 @@ class SvcMonitor(object):
             obj_class = DBBase._OBJ_TYPE_MAP.get(obj_type)
             if obj_class is None:
                 return
+            obj_id = oper_info['uuid']
+            dependency_tracker = DependencyTracker(DBBase._OBJ_TYPE_MAP,
+                                                   self._REACTION_MAP)
 
-            if oper_info['oper'] == 'CREATE' or oper_info['oper'] == 'UPDATE':
-                dependency_tracker = DependencyTracker(DBBase._OBJ_TYPE_MAP,
-                    self._REACTION_MAP)
-                obj_id = oper_info['uuid']
-                obj = obj_class.get(obj_id)
+            if oper_info['oper'] == 'CREATE':
+                obj = obj_class.locate(obj_id)
                 if obj is not None:
                     dependency_tracker.evaluate(obj_type, obj)
-                else:
-                    obj = obj_class.locate(obj_id)
-                obj.update()
-                dependency_tracker.evaluate(obj_type, obj)
+            elif oper_info['oper'] == 'UPDATE':
+                obj = obj_class.get(obj_id)
+                if obj is not None:
+                    try:
+                        obj.update()
+                        dependency_tracker.evaluate(obj_type, obj)
+                    except exceptions.NoIdError:
+                        obj = None
             elif oper_info['oper'] == 'DELETE':
-                obj_id = oper_info['uuid']
                 obj = obj_class.get(obj_id)
                 if obj is None:
                     return
-                dependency_tracker = DependencyTracker(DBBase._OBJ_TYPE_MAP,
-                    self._REACTION_MAP)
                 dependency_tracker.evaluate(obj_type, obj)
                 obj_class.delete(obj_id)
             else:
@@ -254,8 +255,9 @@ class SvcMonitor(object):
                 return
 
             if obj is None:
-                self.config_log('Error while accessing %s uuid %s' % (
-                                obj_type, obj_id))
+                self.config_log('%s uuid %s has vanished' % (
+                                obj_type, obj_id),
+                                level=SandeshLevel.SYS_WARN)
                 return
 
         except Exception:
@@ -1072,7 +1074,8 @@ def parse_args(args_str):
         'cluster_id': '',
         'check_service_interval': '60',
         'sandesh_send_rate_limit' : SandeshSystem.get_sandesh_send_rate_limit(),
-        }
+        'nova_endpoint_type': 'internalURL',
+    }
     secopts = {
         'use_certs': False,
         'keyfile': '',

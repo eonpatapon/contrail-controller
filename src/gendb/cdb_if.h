@@ -239,11 +239,11 @@ private:
     typedef boost::tuple<bool, size_t, DbQueueWaterMarkCb>
         DbQueueWaterMarkInfo;
     void Db_SetQueueWaterMarkInternal(CdbIfQueue *queue,
-        std::vector<DbQueueWaterMarkInfo> &vwmi);
+        const std::vector<DbQueueWaterMarkInfo> &vwmi);
     void Db_SetQueueWaterMarkInternal(CdbIfQueue *queue,
-        DbQueueWaterMarkInfo &wmi);
+        const DbQueueWaterMarkInfo &wmi);
 
-    boost::shared_ptr<apache::thrift::transport::TTransport> socket_;
+    boost::shared_ptr<apache::thrift::transport::TSocketPool> socket_;
     boost::shared_ptr<apache::thrift::transport::TTransport> transport_;
     boost::shared_ptr<apache::thrift::protocol::TProtocol> protocol_;
     boost::scoped_ptr<org::apache::cassandra::CassandraClient> client_;
@@ -267,7 +267,8 @@ private:
     CdbIfStats stats_;
     std::vector<DbQueueWaterMarkInfo> cdbq_wm_info_;
     // Connection timeout to a server (before moving to next server)
-    static const int connectionTimeout = 3000;
+    static const int kConnectionTimeout = 3000;
+    static const int kRecvTimeout = 30000;
 };
 
 CdbIf::CdbIfStats::Errors operator+(const CdbIf::CdbIfStats::Errors &a,

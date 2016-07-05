@@ -156,12 +156,11 @@ public:
 
         // Find the vm's node using its UUID. If the config has not added the
         // vm yet, treat this request as pending since we cant process it right
-        // now.
+        // now. If the node is marked deleted, mark it as pending since the
+        // node might get revived. In this case, the pending entry will get
+        // cleaned up either via an unsub from the client or client-delete.
         IFMapNode *vm_node = ifmap_server_->GetVmNodeByUuid(vm_uuid_);
-        if (vm_node) {
-            if (vm_node->IsDeleted()) {
-                return true;
-            }
+        if (vm_node && !vm_node->IsDeleted()) {
             IFMapServerTable *vr_table = static_cast<IFMapServerTable *>(
                 db_->FindTable("__ifmap__.virtual_router.0"));
             assert(vr_table != NULL);
@@ -223,8 +222,14 @@ void IFMapServer::ClientRegister(IFMapClient *client) {
     }
     client_indexes_.set(index);
 
-    client_map_.insert(make_pair(client->identifier(), client));
-    index_map_.insert(make_pair(index, client));
+    std::pair<ClientMap::iterator, bool> cm_ret;
+    cm_ret = client_map_.insert(make_pair(client->identifier(), client));
+    assert(cm_ret.second);
+
+    std::pair<IndexMap::iterator, bool> im_ret;
+    im_ret = index_map_.insert(make_pair(index, client));
+    assert(im_ret.second);
+
     client->Initialize(exporter_.get(), index);
     queue_->Join(index);
     IFMAP_DEBUG(IFMapServerClientRegUnreg, "Register request for client ",
@@ -247,8 +252,10 @@ void IFMapServer::ClientUnregister(IFMapClient *client) {
     size_t index = client->index();
     sender_->CleanupClient(index);
     queue_->Leave(index);
-    index_map_.erase(index);
-    client_map_.erase(client->identifier());
+    ImSz_t iret = index_map_.erase(index);
+    assert(iret == 1);
+    CmSz_t cret = client_map_.erase(client->identifier());
+    assert(cret == 1);
     client_indexes_.reset(index);
 }
 
@@ -260,9 +267,12 @@ bool IFMapServer::ProcessClientWork(bool add, IFMapClient *client) {
     } else {
         RemoveSelfAddedLinksAndObjects(client);
         CleanupUuidMapper(client);
-        ClientExporterCleanup(client);
         SaveClientHistory(client);
+        int index = client->index();
         ClientUnregister(client);
+        // Exporter cleanup must happen after ClientUnregister() which does
+        // Q-Leave which needs the config trackers in the exporters.
+        ClientExporterCleanup(index);
     }
     return true;
 }
@@ -356,12 +366,12 @@ void IFMapServer::ClientExporterSetup(IFMapClient *client) {
     exporter_->AddClientConfigTracker(client->index());
 }
 
-void IFMapServer::ClientExporterCleanup(IFMapClient *client) {
-    exporter_->CleanupClientConfigTrackedEntries(client->index());
-    exporter_->DeleteClientConfigTracker(client->index());
+void IFMapServer::ClientExporterCleanup(int index) {
+    exporter_->CleanupClientConfigTrackedEntries(index);
+    exporter_->DeleteClientConfigTracker(index);
 
     BitSet rm_bs;
-    rm_bs.set(client->index());
+    rm_bs.set(index);
     exporter_->ResetLinkDeleteClients(rm_bs);
 }
 
@@ -442,8 +452,10 @@ void IFMapServer::FillClientMap(IFMapServerShowClientMap *out_map,
         }
         IFMapServerClientMapShowEntry entry;
         entry.set_client_name(client->identifier());
-        entry.set_tracker_entries(
-            exporter_->ClientConfigTrackerSize(client->index()));
+        entry.set_interest_tracker_entries(exporter_->ClientConfigTrackerSize(
+                    IFMapExporter::INTEREST, client->index()));
+        entry.set_advertised_tracker_entries(exporter_->ClientConfigTrackerSize(
+                    IFMapExporter::ADVERTISED, client->index()));
         out_map->clients.push_back(entry);
     }
     out_map->set_print_count(out_map->clients.size());

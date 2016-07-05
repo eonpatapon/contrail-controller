@@ -68,6 +68,8 @@ struct UpdateQueueShowEntry {
     1: string node_name;
     2: string qe_type;
     3: string qe_bitset;
+    4: string queue_insert_ago;
+    5: u64 sequence;
 }
 
 request sandesh IFMapUpdateQueueShowReq {
@@ -90,8 +92,10 @@ struct IFMapXmppClientInfo {
     9: VmRegInfo vm_reg_info;
     3: u64 msgs_sent;
     4: u64 msgs_blocked;
-    5: u64 nodes_sent;
-    6: u64 links_sent;
+    5: u64 update_nodes_sent;
+    10: u64 delete_nodes_sent;
+    6: u64 update_links_sent;
+    11: u64 delete_links_sent;
     7: u64 bytes_sent;
     8: bool is_blocked;
 }
@@ -107,7 +111,8 @@ response sandesh IFMapXmppClientInfoShowResp {
 
 struct IFMapServerClientMapShowEntry {
     1: string client_name;
-    2: u64 tracker_entries;
+    2: u64 interest_tracker_entries;
+    3: u64 advertised_tracker_entries;
 }
 
 struct IFMapServerShowClientMap {
@@ -155,7 +160,8 @@ response sandesh IFMapServerClientShowResp {
 struct IFMapPerClientNodesShowInfo {
     1: string node_name (link="IFMapNodeShowReq")
     2: string sent;
-    3: string tracked;
+    3: string interest_tracked;
+    4: string advertised_tracked;
 }
 
 request sandesh IFMapPerClientNodesShowReq {
@@ -176,7 +182,8 @@ struct IFMapPerClientLinksShowInfo {
     2: string left (link="IFMapNodeShowReq")
     3: string right (link="IFMapNodeShowReq")
     4: string sent;
-    5: string tracked;
+    5: string interest_tracked;
+    6: string advertised_tracked;
 }
 
 request sandesh IFMapPerClientLinksShowReq {
@@ -267,8 +274,10 @@ struct IFMapPeerServerConnInfo {
     4: string connection_status;
     5: string host;
     6: string port;
+    11: i32 end_of_rib_timeout_ms;
     7: bool end_of_rib_computed;
     8: bool end_of_rib_timer_running;
+    12: i32 stale_entries_cleanup_timeout_ms;
     9: bool start_stale_entries_cleanup;
     10: bool stale_entries_cleanup_timer_running;
 }
@@ -300,6 +309,7 @@ struct IFMapStateMachineInfo {
     6: u64 workq_enqueues;
     7: u64 workq_dequeues;
     8: u64 workq_length;
+    9: i32 max_response_wait_interval_ms;
 }
 
 struct IFMapDSPeerInfoEntry {

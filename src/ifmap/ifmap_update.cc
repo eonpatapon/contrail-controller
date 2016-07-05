@@ -4,6 +4,7 @@
 
 #include "ifmap/ifmap_update.h"
 
+#include "base/time_util.h"
 #include "ifmap/ifmap_node.h"
 
 IFMapObjectPtr::IFMapObjectPtr() 
@@ -19,6 +20,14 @@ IFMapObjectPtr::IFMapObjectPtr(IFMapNode *node)
 IFMapObjectPtr::IFMapObjectPtr(IFMapLink *link) 
     : type(LINK) {
       u.link = link;
+}
+
+void IFMapListEntry::set_queue_insert_at_to_now() {
+    queue_insert_at = UTCTimestampUsec();
+}
+
+std::string IFMapListEntry::queue_insert_ago_str() {
+    return duration_usecs_to_string(UTCTimestampUsec() - queue_insert_at);
 }
 
 IFMapUpdate::IFMapUpdate(IFMapNode *node, bool positive)
@@ -44,8 +53,7 @@ std::string IFMapUpdate::ConfigName() {
 }
 
 std::string IFMapUpdate::ToString() {
-    std::string name = ConfigName();
-    return TypeToString() + " of " + name;
+    return TypeToString() + ":" + ConfigName();
 }
 
 void IFMapUpdate::AdvertiseReset(const BitSet &set) {
@@ -62,6 +70,10 @@ void IFMapUpdate::SetAdvertise(const BitSet &set) {
 
 IFMapMarker::IFMapMarker()
     : IFMapListEntry(MARKER) {
+}
+
+std::string IFMapMarker::ToString() {
+    return std::string("Marker:") + mask.ToNumberedString();
 }
 
 IFMapState::IFMapState(IFMapNode *node)

@@ -150,6 +150,11 @@ int FlowTableKSyncEntry::Encode(sandesh_op::type op, char *buf, int buf_len) {
     uint16_t drop_reason = VR_FLOW_DR_UNKNOWN;
     FlowEntry *rev_flow = flow_entry_->reverse_flow_entry();
 
+    if (op != sandesh_op::DELETE &&
+        rev_flow && rev_flow->flow_handle() == FlowEntry::kInvalidFlowHandle) {
+        return 0;
+    }
+
     req.set_fr_op(flow_op::FLOW_SET);
     req.set_fr_rid(0);
     req.set_fr_index(hash_id_);
@@ -249,7 +254,12 @@ int FlowTableKSyncEntry::Encode(sandesh_op::type op, char *buf, int buf_len) {
         }
 
         req.set_fr_ftable_size(0);
-        req.set_fr_ecmp_nh_index(flow_entry_->data().component_nh_idx);
+        if (flow_entry_->data().component_nh_idx !=
+                (uint32_t)CompositeNH::kInvalidComponentNHIdx) {
+            req.set_fr_ecmp_nh_index(flow_entry_->data().component_nh_idx);
+        } else {
+            req.set_fr_ecmp_nh_index(0);
+        }
 
         if (flow_entry_->is_flags_set(FlowEntry::EcmpFlow) &&
             flow_entry_->reverse_flow_entry() != NULL) {
@@ -286,6 +296,11 @@ int FlowTableKSyncEntry::Encode(sandesh_op::type op, char *buf, int buf_len) {
             flags |= VR_FLOW_FLAG_VRFT;
             req.set_fr_flow_dvrf(flow_entry_->data().dest_vrf);
             req.set_fr_rindex(nat_flow->flow_handle());
+        }
+
+        if (flow_entry_->reverse_flow_entry()) {
+            flags |= VR_RFLOW_VALID;
+            req.set_fr_rindex(flow_entry_->reverse_flow_entry()->flow_handle());
         }
 
         if (fe_action & (1 << TrafficAction::VRF_TRANSLATE)) {
@@ -489,15 +504,16 @@ bool FlowTableKSyncEntry::IsLess(const KSyncEntry &rhs) const {
     return flow_entry_ < entry.flow_entry_;
 }
 
-void FlowTableKSyncEntry::ErrorHandler(int err, uint32_t seq_no) const {
+void FlowTableKSyncEntry::ErrorHandler(int err, uint32_t seq_no,
+                                       KSyncEvent event) const {
     if (err == ENOSPC || err == EBADF) {
         KSYNC_ERROR(VRouterError, "VRouter operation failed. Error <", err,
                     ":", strerror(err), ">. Object <", ToString(),
-                    ">. Operation <", OperationString(), ">. Message number :",
-                    seq_no);
+                    ">. Operation <", AckOperationString(event),
+                    ">. Message number :", seq_no);
         return;
     }
-    KSyncEntry::ErrorHandler(err, seq_no);
+    KSyncEntry::ErrorHandler(err, seq_no, event);
 }
 
 FlowTableKSyncObject::FlowTableKSyncObject(KSync *ksync) : 
