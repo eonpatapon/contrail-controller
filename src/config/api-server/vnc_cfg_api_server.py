@@ -51,7 +51,7 @@ threading._DummyThread._Thread__stop = lambda x: 42
 CONFIG_VERSION = '1.0'
 
 import bottle
-bottle.BaseRequest.MEMFILE_MAX = 1024000
+bottle.BaseRequest.MEMFILE_MAX = 2097152
 
 import utils
 import vnc_cfg_types
