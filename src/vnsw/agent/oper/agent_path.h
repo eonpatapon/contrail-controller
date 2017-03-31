@@ -24,6 +24,8 @@ class PathPreference {
 public:
     enum Preference {
         HA_STALE = 1,
+	LOW_SI = 80,
+	HIGH_SI = 90,
         LOW = 100,
         HIGH = 200
     };

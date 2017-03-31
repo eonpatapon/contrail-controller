@@ -372,6 +372,8 @@ public:
 
     enum Preference {
         INVALID = 0,
+	LOW_SI  = 80,
+	HIGH_SI = 90,
         LOW     = 100,
         HIGH    = 200
     };

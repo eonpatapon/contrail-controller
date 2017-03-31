@@ -687,6 +687,12 @@ static void BuildAttributes(Agent *agent, IFMapNode *node,
             if (prop.local_preference == VmInterface::HIGH) {
                 data->local_preference_ = VmInterface::HIGH;
             }
+            if (prop.local_preference == VmInterface::LOW_SI) {
+                data->local_preference_ = VmInterface::LOW_SI;
+            }
+            if (prop.local_preference == VmInterface::HIGH_SI) {
+                data->local_preference_ = VmInterface::HIGH_SI;
+            }
         }
     }
 
@@ -3059,6 +3065,13 @@ void VmInterface::SetPathPreference(PathPreference *pref, bool ecmp) const {
     if (ecmp || local_preference_ == HIGH) {
         pref->set_preference(PathPreference::HIGH);
     }
+    if (local_preference_ == HIGH_SI) {
+        pref->set_preference(PathPreference::HIGH_SI);
+    }
+    if (local_preference_ == LOW_SI) {
+        pref->set_preference(PathPreference::LOW_SI);
+    }
+
 }
 
 //Add a route for VM port

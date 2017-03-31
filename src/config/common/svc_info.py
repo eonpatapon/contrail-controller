@@ -24,8 +24,8 @@ _NETNS_INSTANCE_TYPE = 'network-namespace'
 _SNAT_SVC_TYPE = 'source-nat'
 _LB_SVC_TYPE = 'loadbalancer'
 
-_ACTIVE_LOCAL_PREFERENCE = 200
-_STANDBY_LOCAL_PREFERENCE = 100
+_ACTIVE_LOCAL_PREFERENCE = 90
+_STANDBY_LOCAL_PREFERENCE = 80
 
 # Version from the vrouter agent can manage service instances
 _VROUTER_NETNS_SUPPORTED_VERSION = '1.10'
