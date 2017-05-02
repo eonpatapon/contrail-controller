@@ -215,7 +215,7 @@ class IndexAllocator(object):
 
 class ZookeeperClient(object):
 
-    def __init__(self, module, server_list, logging_fn=None, zk_handler=None):
+    def __init__(self, module, server_list, logging_fn=None, zk_timeout=400, zk_handler=None):
         # logging
         logger = logging.getLogger(module)
         logger.setLevel(logging.INFO)
@@ -240,7 +240,7 @@ class ZookeeperClient(object):
 
         self._zk_client = kazoo.client.KazooClient(
            server_list,
-           timeout=400,
+           timeout=zk_timeout,
            handler=zk_handler,
            logger=logger)
 

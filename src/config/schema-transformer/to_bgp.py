@@ -62,6 +62,7 @@ from cfgm_common.uve.cfgm_cpuinfo.ttypes import NodeStatusUVE, \
     NodeStatus
 from cStringIO import StringIO
 from cfgm_common.utils import cgitb_hook
+import signal
 
 from kazoo.handlers.threading import SequentialThreadingHandler
 
@@ -3536,6 +3537,7 @@ class SchemaTransformer(object):
                 # end for policy_rule_entries.policy_rule
             # end for virtual_network.policies
 
+
             if static_acl_entries is not None:
                 # if a static acl is created, then for each rule, we need to
                 # add a deny rule and add a my-vn to any allow rule in the end
@@ -3551,34 +3553,38 @@ class SchemaTransformer(object):
                 acl = AclRuleType(match, action)
                 acl_list.append(acl)
 
-                for rule in static_acl_entries.get_acl_rule():
-                    match = MatchConditionType(
-                        "any", rule.match_condition.src_address,
-                        PortType(-1, -1), rule.match_condition.dst_address,
-                        PortType(-1, -1))
+                if self._args.logical_routers_enabled:
+                    for rule in static_acl_entries.get_acl_rule():
+                        match = MatchConditionType(
+                            "any", rule.match_condition.src_address,
+                            PortType(-1, -1), rule.match_condition.dst_address,
+                            PortType(-1, -1))
 
-                    acl = AclRuleType(match, ActionListType("deny"),
-                                      rule.get_rule_uuid())
-                    acl_list.append(acl)
+                        acl = AclRuleType(match, ActionListType("deny"),
+                                          rule.get_rule_uuid())
+                        acl_list.append(acl)
 
-                    match = MatchConditionType(
-                        "any", rule.match_condition.dst_address,
-                        PortType(-1, -1), rule.match_condition.src_address,
-                        PortType(-1, -1))
+                        match = MatchConditionType(
+                            "any", rule.match_condition.dst_address,
+                            PortType(-1, -1), rule.match_condition.src_address,
+                            PortType(-1, -1))
 
-                    acl = AclRuleType(match, ActionListType("deny"),
-                                      rule.get_rule_uuid())
-                    acl_list.append(acl)
-                # end for rule
+                        acl = AclRuleType(match, ActionListType("deny"),
+                                          rule.get_rule_uuid())
+                        acl_list.append(acl)
+                    # end for rule
 
-                # Create any-vn to any-vn allow
+                    # Create any-vn to any-vn allow
+                    any_any_action = ActionListType("pass")
+                else:
+                    # Create any-vn to any-vn deny
+                    any_any_action = ActionListType("deny")
                 match = MatchConditionType("any",
                                            AddressType(virtual_network="any"),
                                            PortType(-1, -1),
                                            AddressType(virtual_network="any"),
                                            PortType(-1, -1))
-                action = ActionListType("pass")
-                acl = AclRuleType(match, action)
+                acl = AclRuleType(match, any_any_action)
                 acl_list.append(acl)
                 acl_list.update_acl_entries(static_acl_entries)
 
@@ -3939,6 +3945,7 @@ def parse_args(args_str):
                          --use_syslog
                          --syslog_facility LOG_USER
                          --cluster_id <testbed-name>
+                         --zk_timeout 400
                          [--reset_config]
     '''
 
@@ -3974,6 +3981,8 @@ def parse_args(args_str):
         'syslog_facility': Sandesh._DEFAULT_SYSLOG_FACILITY,
         'cluster_id': '',
         'sandesh_send_rate_limit': SandeshSystem.get_sandesh_send_rate_limit(),
+        'zk_timeout': 400,
+        'logical_routers_enabled': True,
     }
     secopts = {
         'use_certs': False,
@@ -4012,6 +4021,11 @@ def parse_args(args_str):
     defaults.update(secopts)
     defaults.update(ksopts)
     parser.set_defaults(**defaults)
+    def _bool(s):
+        """Convert string to bool (in argparse context)."""
+        if s.lower() not in ['true', 'false']:
+            raise ValueError('Need bool; got %r' % s)
+        return {'true': True, 'false': False}[s.lower()]
 
     parser.add_argument(
         "--ifmap_server_ip", help="IP address of ifmap server")
@@ -4072,6 +4086,10 @@ def parse_args(args_str):
                         help="Used for database keyspace separation")
     parser.add_argument("--sandesh_send_rate_limit", type=int,
             help="Sandesh send rate limit in messages/sec")
+    parser.add_argument("--zk_timeout", type=int,
+                        help="Timeout for ZookeeperClient")
+    parser.add_argument("--logical_routers_enabled", type=_bool,
+                        help="Logical Routers enabled")
     args = parser.parse_args(remaining_argv)
     if type(args.cassandra_server_list) is str:
         args.cassandra_server_list = args.cassandra_server_list.split()
@@ -4122,8 +4140,18 @@ def run_schema_transformer(args):
 # end run_schema_transformer
 
 
+def sigterm_handler():
+    # Register a handler for SIGTERM so that we can release the lock
+    # Without it, it can take several minutes before new master is elected
+    # A signal hander was added in VncKombuClient, but since schema
+    # transformer does not use rabbitmq before R3.0, we need to add
+    # a separate handler here.
+    exit()
+
+
 def main(args_str=None):
     global _zookeeper_client
+    gevent.signal(signal.SIGTERM, sigterm_handler)
     if not args_str:
         args_str = ' '.join(sys.argv[1:])
     args = parse_args(args_str)
@@ -4134,6 +4162,7 @@ def main(args_str=None):
         client_pfx = ''
         zk_path_pfx = ''
     _zookeeper_client = ZookeeperClient(client_pfx+"schema", args.zk_server_ip,
+                                        zk_timeout =args.zk_timeout,
                                         zk_handler=SequentialThreadingHandler())
     _zookeeper_client.master_election(zk_path_pfx+"/schema-transformer",
                                       os.getpid(), run_schema_transformer,
