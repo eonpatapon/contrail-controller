@@ -22,6 +22,8 @@ import ast
 from distutils.version import StrictVersion as V
 import random
 import six
+import operator
+from pkg_resources import parse_version
 
 from cfgm_common import analytics_client
 from cfgm_common import svc_info
@@ -32,6 +34,15 @@ from svc_monitor.config_db import *
 
 from sandesh_common.vns.constants import \
      ANALYTICS_API_SERVER_DISCOVERY_SERVICE_NAME as analytics_svc_name
+
+op_map = {
+    '>': operator.gt,
+    '<': operator.lt,
+    '>=': operator.ge,
+    '<=': operator.le,
+    '=': operator.eq
+}
+
 
 @six.add_metaclass(abc.ABCMeta)
 class VRouterScheduler(object):
@@ -124,6 +135,12 @@ class VRouterScheduler(object):
         agents_status = self.query_uve("*?cfilt=NodeStatus:process_status")
         vrouters_mode = self.query_uve("*?cfilt=VrouterAgent:mode")
 
+        if self._args.vrouter_scheduling_version is not None:
+            vrouters_version = self.query_uve("*?cfilt=VrouterAgent:build_info")
+            op, rver = self._args.vrouter_scheduling_version.split()
+            op = op_map[op]
+            rver = parse_version(rver)
+
         for vr in VirtualRouterSM.values():
             if az_vrs and vr.name not in az_vrs:
                 vr.set_agent_state(False)
@@ -142,6 +159,14 @@ class VRouterScheduler(object):
             except Exception as e:
                 vr.set_agent_state(False)
                 continue
+
+            if self._args.vrouter_scheduling_version is not None:
+                cver = parse_version(
+                    ast.literal_eval(vrouters_version[vr.name]['VrouterAgent']['build_info'])['build-info'][0]['build-version']
+                )
+                if not op(cver, rver):
+                    vr.set_agent_state(False)
+                    continue
 
             try:
                 state_up = False

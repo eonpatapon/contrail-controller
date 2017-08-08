@@ -1120,6 +1120,7 @@ def parse_args(args_str):
         'analytics_server_port': '8081',
         'availability_zone': None,
         'netns_availability_zone': None,
+        'vrouter_scheduling_version': None,
     }
 
     config = ConfigParser.SafeConfigParser()
@@ -1231,6 +1232,9 @@ def parse_args(args_str):
     if args.netns_availability_zone and \
             args.netns_availability_zone.lower() == 'none':
         args.netns_availability_zone = None
+    if args.vrouter_scheduling_version and \
+            args.vrouter_scheduling_version.lower() == 'none':
+        args.vrouter_scheduling_version = None
     return args
 
 
